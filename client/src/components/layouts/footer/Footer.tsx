@@ -1,4 +1,4 @@
 function Footer() {
-  return <div>Footer</div>;
+  return <div className="min-h-[50vh]">Footer</div>;
 }
 export default Footer;

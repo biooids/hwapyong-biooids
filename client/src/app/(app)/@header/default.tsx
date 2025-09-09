@@ -4,7 +4,7 @@ import Header from "@/components/layouts/header/Header";
 
 function page() {
   return (
-    <div>
+    <div className="">
       <Header />
     </div>
   );

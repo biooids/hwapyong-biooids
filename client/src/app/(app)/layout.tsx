@@ -13,10 +13,15 @@ export default function layout({
   sidebar: ReactNode;
 }) {
   return (
-    <div>
-      <header>{header}</header>
-      <main></main>
-      <footer></footer>
+    <div className=" ">
+      <header className="w-full sticky top-0 z-50 backdrop-blur-lg">
+        {header}
+      </header>
+      <div className="flex">
+        <aside>{sidebar}</aside>
+        <main className="min-h-screen  flex-1    ">{children}</main>
+      </div>
+      <footer>{footer}</footer>
     </div>
   );
 }
