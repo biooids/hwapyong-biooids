@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* ... (keep all your theme variables from :root and .dark) ... */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -111,3 +112,186 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
 }
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+/* app/styles/editor.css */
+
+/* Target the editor area Tiptap creates */
+.ProseMirror {
+  outline: none;
+  line-height: 1.75;
+  font-size: 1rem;
+  min-height: 400px;
+}
+
+/* Use theme variables for all text elements */
+.ProseMirror {
+  color: var(--foreground);
+}
+
+.ProseMirror h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: var(--foreground);
+}
+
+.ProseMirror h1:first-child {
+  margin-top: 0;
+}
+
+.ProseMirror h2 {
+  font-size: 1.875rem;
+  font-weight: 600;
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+  color: var(--foreground);
+}
+
+.ProseMirror h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--foreground);
+}
+
+.ProseMirror p {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+/* --- START: NEW BLOCKQUOTE STYLES --- */
+.ProseMirror blockquote {
+  border-left: 3px solid var(--border);
+  margin: 1.5rem 0;
+  padding-left: 1rem;
+  font-style: italic;
+  color: var(--muted-foreground);
+}
+
+.ProseMirror blockquote p {
+  margin: 0;
+}
+/* --- END: NEW BLOCKQUOTE STYLES --- */
+
+.ProseMirror ul,
+.ProseMirror ol {
+  margin: 1rem 0;
+  padding-left: 2rem;
+  list-style-position: outside;
+}
+
+.ProseMirror ul {
+  list-style-type: disc;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+}
+
+.ProseMirror li {
+  margin-bottom: 0.5rem;
+  display: list-item;
+}
+
+.ProseMirror pre {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  font-family: var(--font-mono);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+
+.ProseMirror :not(pre) > code {
+  background: var(--muted);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.9em;
+  color: var(--destructive);
+  font-family: var(--font-mono);
+}
+
+.ProseMirror pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+  font-size: 1em;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  height: 0;
+}
+
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  margin: 1rem 0;
+}
+
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 3px solid var(--primary);
+}
+
+/* --- START: CORRECTED TASK LIST STYLES --- */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+}
+
+.ProseMirror li[data-type="taskItem"] {
+  display: flex;
+  /* THIS IS THE KEY FIX: align items to the start (top) */
+  align-items: flex-start;
+
+  gap: 0.5rem;
+}
+
+.ProseMirror li[data-type="taskItem"]::before {
+  content: none;
+}
+
+.ProseMirror li[data-type="taskItem"] > label {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  /* Add a little top margin to align checkbox with the first line of text */
+  margin-top: 0.25rem;
+}
+
+.ProseMirror li[data-type="taskItem"] > label input[type="checkbox"] {
+  cursor: pointer;
+  width: 1rem; /* 16px */
+  height: 1rem; /* 16px */
+}
+
+.ProseMirror li[data-type="taskItem"] > div {
+  flex: 1 1 0%;
+}
+
+.ProseMirror li[data-type="taskItem"] > div > p {
+  margin: 0;
+}
+
+.ProseMirror li[data-type="taskItem"][data-checked="true"] > div > p {
+  text-decoration: line-through;
+  color: var(--muted-foreground);
+}
+/* --- END: CORRECTED TASK LIST STYLES --- */
