@@ -1,4 +1,4 @@
-import { Book, Home, LucideIcon, Pen } from "lucide-react";
+import { Book, DollarSign, Home, LucideIcon, Pen } from "lucide-react";
 
 type navLink = {
   href: string;
@@ -10,4 +10,5 @@ export const navLinks: navLink[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "todo", label: "To-do", icon: Pen },
   { href: "notes", label: "Notes", icon: Book },
+  { href: "expense", label: "Expense", icon: DollarSign },
 ];

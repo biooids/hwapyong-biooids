@@ -256,8 +256,7 @@
 }
 
 .ProseMirror li[data-type="taskItem"] {
-  display: flex;
-  /* THIS IS THE KEY FIX: align items to the start (top) */
+  display: flex !important;
   align-items: flex-start;
 
   gap: 0.5rem;
@@ -295,3 +294,9 @@
   color: var(--muted-foreground);
 }
 /* --- END: CORRECTED TASK LIST STYLES --- */
+
+.section-gaps {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
