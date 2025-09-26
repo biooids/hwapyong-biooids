@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    // --- Project Structure ---
+    "outDir": "dist",
+    "rootDir": "src",
+    "baseUrl": "src",
+    "paths": {
+      "@/*": ["*"]
+    },
+
+    // --- Target and Libraries ---
+    "target": "ES2022",
+    "lib": ["es2022"],
+    "useDefineForClassFields": true,
+
+    // --- Modules ---
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolveJsonModule": true,
+
+    // --- Build Output & Debugging ---
+    "sourceMap": true,
+    "declaration": true,
+    "removeComments": true,
+    "incremental": true,
+
+    // --- Interoperability ---
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // --- Strictness & Code Quality ---
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+
+    // --- Advanced Tooling Compatibility ---
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "tests",
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
+}
