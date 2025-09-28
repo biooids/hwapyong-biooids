@@ -7,7 +7,8 @@
 // This gives you direct control over the roles in your application.
 export enum SystemRole {
   USER = "USER",
-  ADMIN = "ADMIN",
+  SYSTEM_CONTENT_CREATOR = "SYSTEM_CONTENT_CREATOR",
+  DEVELOPER = "DEVELOPER",
   SUPER_ADMIN = "SUPER_ADMIN",
 }
 
@@ -15,7 +16,7 @@ export enum SystemRole {
 export {};
 
 // Define the shape of the user object that your authentication middleware will add to the request.
-interface SanitizedUser {
+export interface SanitizedUser {
   id: string;
   name: string;
   username: string;

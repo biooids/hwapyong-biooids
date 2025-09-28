@@ -16,7 +16,7 @@ $$ language 'plpgsql';
 CREATE TYPE "SystemRole" AS ENUM ('USER', 'SYSTEM_CONTENT_CREATOR', 'DEVELOPER', 'SUPER_ADMIN');
 CREATE TYPE "ThemePreference" AS ENUM ('LIGHT', 'DARK', 'SYSTEM');
 
--- Step 2: Create all the necessary tables for the application.
+-- Step 2: Create the necessary tables for the application.
 
 -- Stores the core user account information, including credentials and profile details.
 CREATE TABLE "users" (
@@ -60,56 +60,14 @@ CREATE TABLE "refresh_tokens" (
   "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
  
--- Stores single-use tokens for the "forgot password" feature.
-CREATE TABLE "password_reset_tokens" (
-  "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  "token" TEXT NOT NULL UNIQUE,
-  "expires_at" TIMESTAMPTZ NOT NULL,
-  "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "user_id" UUID NOT NULL REFERENCES "users"("id") ON DELETE CASCADE
-);
-
--- Stores single-use tokens for verifying a user's email upon registration.
-CREATE TABLE "email_verification_tokens" (
-  "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  "token" TEXT NOT NULL UNIQUE,
-  "expires_at" TIMESTAMPTZ NOT NULL,
-  "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "user_id" UUID NOT NULL REFERENCES "users"("id") ON DELETE CASCADE
-);
-
--- Stores in-app notifications for users.
-CREATE TABLE "notifications" (
-  "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  "content" TEXT NOT NULL,
-  "is_read" BOOLEAN NOT NULL DEFAULT false,
-  "url" TEXT,
-  "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "user_id" UUID NOT NULL REFERENCES "users"("id") ON DELETE CASCADE
-);
-
--- Stores user-specific application preferences.
+-- Stores user-specific application preferences like theme.
+-- [MODIFIED] - Columns for deleted features (notifications, email) have been removed.
 CREATE TABLE "user_settings" (
   "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   "theme" "ThemePreference" NOT NULL DEFAULT 'SYSTEM',
-  "notifications_enabled" BOOLEAN NOT NULL DEFAULT true,
-  "email_marketing" BOOLEAN NOT NULL DEFAULT false,
-  "email_social" BOOLEAN NOT NULL DEFAULT true,
   "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "user_id" UUID NOT NULL UNIQUE REFERENCES "users"("id") ON DELETE CASCADE
 );
-
--- Stores records of marketing emails for tracking purposes.
-CREATE TABLE "marketing_emails" (
-  "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  "subject" TEXT NOT NULL,
-  "html_content" TEXT NOT NULL,
-  "app_version" TEXT,
-  "status" TEXT NOT NULL DEFAULT 'draft',
-  "sent_at" TIMESTAMPTZ,
-  "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 
 -- Step 3: Apply Triggers to tables that need automatic 'updated_at' timestamps.
 CREATE TRIGGER set_users_updated_at BEFORE UPDATE ON "users" FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -127,11 +85,7 @@ DROP TRIGGER IF EXISTS set_refresh_tokens_updated_at ON "refresh_tokens";
 DROP TRIGGER IF EXISTS set_users_updated_at ON "users";
 
 -- Drop tables
-DROP TABLE IF EXISTS "marketing_emails";
 DROP TABLE IF EXISTS "user_settings";
-DROP TABLE IF EXISTS "notifications";
-DROP TABLE IF EXISTS "email_verification_tokens";
-DROP TABLE IF EXISTS "password_reset_tokens";
 DROP TABLE IF EXISTS "refresh_tokens";
 DROP TABLE IF EXISTS "follows";
 DROP TABLE IF EXISTS "users";
