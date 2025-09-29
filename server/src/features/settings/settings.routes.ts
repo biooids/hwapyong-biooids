@@ -1,8 +1,8 @@
-// FILE: src/features/settings/settings.routes.ts
+// src/features/settings/settings.routes.ts
 
 import { Router } from "express";
 import { settingsController } from "./settings.controller.js";
-import { authenticate } from "../../middleware/authenticate.js";
+import { authenticate } from "../auth/auth.middleware.js"; // Corrected import path
 import { validate } from "../../middleware/validate.js";
 import { updateSettingsSchema } from "./settings.validation.js";
 

@@ -1,17 +1,13 @@
-// FILE: src/middleware/authenticate.ts
+// src/features/auth/auth.middleware.ts
 
 import { Request, Response, NextFunction } from "express";
 import jwt, { JsonWebTokenError } from "jsonwebtoken";
-import { config } from "../config/index.js";
-import { asyncHandler } from "./asyncHandler.js";
-import { createHttpError } from "../utils/error.factory.js";
-// [MODIFIED] - Import the query function and our manually defined types.
-import { query } from "../db/index.js";
-import { DecodedAccessTokenPayload } from "../features/auth/auth.types.js";
-import { SanitizedUser } from "../types/express.d.js";
-
-// [REMOVED] - Prisma is no longer used here.
-// import prisma from "../db/prisma.js";
+import { config } from "../../config/index.js";
+import { asyncHandler } from "../../middleware/asyncHandler.js";
+import { createHttpError } from "../../utils/error.factory.js";
+import { query } from "../../db/index.js";
+import { DecodedAccessTokenPayload } from "./auth.types.js";
+import { SanitizedUser } from "../../types/express.d.js";
 
 interface AuthOptions {
   required?: boolean;
@@ -26,25 +22,22 @@ export const authenticate = (options: AuthOptions = {}) =>
     const { required = false } = options;
     let token: string | undefined;
 
-    // 1. Extract token from Authorization header
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.split(" ")[1];
     }
 
-    // 2. Handle missing token
     if (!token) {
       if (required) {
         return next(
           createHttpError(401, "Authentication required. No token provided.")
         );
       }
-      req.user = null; // Mark as guest
+      req.user = null;
       return next();
     }
 
     try {
-      // 3. Verify token signature and structure
       const decoded = jwt.verify(
         token,
         config.jwt.accessSecret
@@ -54,13 +47,11 @@ export const authenticate = (options: AuthOptions = {}) =>
         throw new JsonWebTokenError("Invalid token payload.");
       }
 
-      // 4. [MODIFIED] - Fetch fresh user data from the database using a direct SQL query.
       const sql =
-        'SELECT "id", "name", "username", "email", "profile_image" AS "profileImage", "banner_image" AS "bannerImage", "system_role" AS "systemRole" FROM "users" WHERE "id" = $1';
+        'SELECT "id", "name", "username", "email", "profile_image_url" AS "profileImage", "banner_image_url" AS "bannerImage", "system_role" AS "systemRole" FROM "users" WHERE "id" = $1';
       const result = await query<SanitizedUser>(sql, [decoded.id]);
       const user = result.rows[0] || null;
 
-      // 5. Handle user not found in DB (token is valid, but user was deleted)
       if (!user) {
         if (required) {
           return next(
@@ -74,11 +65,9 @@ export const authenticate = (options: AuthOptions = {}) =>
         return next();
       }
 
-      // 6. Attach fresh user object to the request and proceed
       req.user = user;
       next();
     } catch (error) {
-      // For any JWT error (expired, invalid signature), treat as unauthorized
       if (required) {
         return next(
           createHttpError(
@@ -87,7 +76,7 @@ export const authenticate = (options: AuthOptions = {}) =>
           )
         );
       }
-      req.user = null; // Mark as guest if token is invalid but not required
+      req.user = null;
       next();
     }
   });

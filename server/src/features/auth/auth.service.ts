@@ -1,14 +1,15 @@
-// FILE: src/features/auth/auth.service.ts
+// src/features/auth/auth.service.ts
 
-import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { Pool, PoolClient } from "pg";
 import { createHttpError } from "../../utils/error.factory.js";
 import { logger } from "../../config/logger.js";
 import {
   generateAccessToken,
   generateAndStoreRefreshToken,
   verifyAndValidateRefreshToken,
-} from "../../utils/jwt.utils.js";
+} from "./jwt.utils.js";
+import { comparePassword, hashPassword } from "./auth.utils.js";
 import {
   SignUpInputDto,
   LoginInputDto,
@@ -18,93 +19,84 @@ import {
   ChangePasswordInputDto,
 } from "./auth.types.js";
 import { userService, User } from "../user/user.service.js";
-import { query } from "../../db/index.js";
+import { query, transaction } from "../../db/index.js";
 
-const sanitizeUser = (user: User): Omit<User, "hashedPassword"> => {
-  const { hashedPassword, ...sanitized } = user;
+const sanitizeUser = (user: User): Omit<User, "hashed_password"> => {
+  const { hashed_password, ...sanitized } = user;
   return sanitized;
 };
 
 export class AuthService {
   public async registerUser(input: SignUpInputDto): Promise<{
-    user: Omit<User, "hashedPassword">;
+    user: Omit<User, "hashed_password">;
     tokens: AuthTokens;
   }> {
-    const { email, username } = input;
-
-    const findUserSql =
-      'SELECT "email", "username" FROM "users" WHERE "email" = $1 OR "username" = $2 LIMIT 1';
-    const findResult = await query<{ email: string; username: string }>(
-      findUserSql,
-      [email, username]
-    );
-    const existingUser = findResult.rows[0];
-
-    if (existingUser) {
-      if (existingUser.email === email) {
-        throw createHttpError(
-          409,
-          "An account with this email already exists."
-        );
+    return transaction(async (client) => {
+      const { email, username } = input;
+      const findUserSql =
+        'SELECT "email", "username" FROM "users" WHERE "email" = $1 OR "username" = $2 LIMIT 1';
+      const findResult = await client.query<{
+        email: string;
+        username: string;
+      }>(findUserSql, [email, username]);
+      const existingUser = findResult.rows[0];
+      if (existingUser) {
+        if (existingUser.email === email) {
+          throw createHttpError(
+            409,
+            "An account with this email already exists."
+          );
+        }
+        if (existingUser.username === username) {
+          throw createHttpError(409, "This username is already taken.");
+        }
       }
-      if (existingUser.username === username) {
-        throw createHttpError(409, "This username is already taken.");
-      }
-    }
-
-    const user = await userService.createUser(input);
-
-    // [REMOVED] - The call to emailService has been deleted.
-    // await emailService.sendWelcomeVerificationEmail(user);
-
-    const accessToken = generateAccessToken(user);
-    const { token: refreshToken, expiresAt } =
-      await generateAndStoreRefreshToken(user.id);
-
-    return {
-      user: sanitizeUser(user),
-      tokens: { accessToken, refreshToken, refreshTokenExpiresAt: expiresAt },
-    };
+      const user = await userService.createUser(input, client);
+      const accessToken = generateAccessToken(user);
+      const { token: refreshToken, expiresAt } =
+        await generateAndStoreRefreshToken(user.id, client);
+      return {
+        user: sanitizeUser(user),
+        tokens: { accessToken, refreshToken, refreshTokenExpiresAt: expiresAt },
+      };
+    });
   }
 
   public async loginUser(input: LoginInputDto): Promise<{
-    user: Omit<User, "hashedPassword">;
+    user: Omit<User, "hashed_password">;
     tokens: AuthTokens;
   }> {
-    const { email, password } = input;
-    const user = await userService.findUserByEmail(email);
-
+    const user = await userService.findUserByEmail(input.email);
     if (!user) {
       throw createHttpError(404, "No account found with this email address.");
     }
-    if (!user.hashedPassword) {
+    if (!user.hashed_password) {
       throw createHttpError(
         400,
         "This account uses a social provider. Please log in with your social account."
       );
     }
-    const isPasswordCorrect = await bcrypt.compare(
-      password,
-      user.hashedPassword
+    const isPasswordCorrect = await comparePassword(
+      input.password,
+      user.hashed_password
     );
     if (!isPasswordCorrect) {
       throw createHttpError(401, "The password you entered is incorrect.");
     }
-
-    logger.info(
-      { userId: user.id },
-      "User login successful, revoking old sessions."
-    );
-    await this.revokeAllRefreshTokensForUser(user.id);
-
-    const accessToken = generateAccessToken(user);
-    const { token: refreshToken, expiresAt } =
-      await generateAndStoreRefreshToken(user.id);
-
-    return {
-      user: sanitizeUser(user),
-      tokens: { accessToken, refreshToken, refreshTokenExpiresAt: expiresAt },
-    };
+    return transaction(async (client) => {
+      logger.info(
+        { userId: user.id },
+        "User login successful, revoking old sessions."
+      );
+      await this.revokeAllRefreshTokensForUser(user.id, client);
+      const accessToken = generateAccessToken(user);
+      const { token: refreshToken, expiresAt } =
+        await generateAndStoreRefreshToken(user.id, client);
+      return {
+        user: sanitizeUser(user),
+        tokens: { accessToken, refreshToken, refreshTokenExpiresAt: expiresAt },
+      };
+    });
   }
 
   public async changeUserPassword(
@@ -114,13 +106,13 @@ export class AuthService {
     const { currentPassword, newPassword } = input;
     const user = await userService.findUserById(userId);
 
-    if (!user || !user.hashedPassword) {
+    if (!user || !user.hashed_password) {
       throw createHttpError(401, "User not found or has no password set.");
     }
 
-    const isPasswordCorrect = await bcrypt.compare(
+    const isPasswordCorrect = await comparePassword(
       currentPassword,
-      user.hashedPassword
+      user.hashed_password
     );
     if (!isPasswordCorrect) {
       throw createHttpError(
@@ -129,19 +121,18 @@ export class AuthService {
       );
     }
 
-    const newHashedPassword = await bcrypt.hash(newPassword, 10);
-    const updateSql =
-      'UPDATE "users" SET "hashed_password" = $1 WHERE "id" = $2';
-    await query(updateSql, [newHashedPassword, userId]);
+    await transaction(async (client) => {
+      const newHashedPassword = await hashPassword(newPassword);
+      const updateSql =
+        'UPDATE "users" SET "hashed_password" = $1 WHERE "id" = $2';
+      await client.query(updateSql, [newHashedPassword, userId]);
 
-    logger.info(
-      { userId },
-      "User password changed successfully. Revoking all sessions."
-    );
-    await this.revokeAllRefreshTokensForUser(userId);
-
-    // [REMOVED] - The call to emailService has been deleted.
-    // await emailService.sendPasswordChangeConfirmationEmail(user);
+      logger.info(
+        { userId },
+        "User password changed successfully. Revoking all sessions."
+      );
+      await this.revokeAllRefreshTokensForUser(userId, client);
+    });
   }
 
   public async handleRefreshTokenRotation(
@@ -154,22 +145,24 @@ export class AuthService {
     if (!input.incomingRefreshToken) {
       throw createHttpError(401, "Refresh token is required.");
     }
-    const decodedOldToken = await verifyAndValidateRefreshToken(
-      input.incomingRefreshToken
-    );
-    const user = await userService.findUserById(decodedOldToken.id);
+    return transaction(async (client) => {
+      const decodedOldToken = await verifyAndValidateRefreshToken(
+        input.incomingRefreshToken,
+        client
+      );
+      const user = await userService.findUserById(decodedOldToken.id, client);
 
-    if (!user) {
-      await this.revokeTokenByJti(decodedOldToken.jti);
-      throw createHttpError(403, "Forbidden: User account not found.");
-    }
+      if (!user) {
+        await this.revokeTokenByJti(decodedOldToken.jti, client);
+        throw createHttpError(403, "Forbidden: User account not found.");
+      }
 
-    await this.revokeTokenByJti(decodedOldToken.jti);
-    const newAccessToken = generateAccessToken(user);
-    const { token: newRefreshToken, expiresAt: newRefreshTokenExpiresAt } =
-      await generateAndStoreRefreshToken(user.id);
-
-    return { newAccessToken, newRefreshToken, newRefreshTokenExpiresAt };
+      await this.revokeTokenByJti(decodedOldToken.jti, client);
+      const newAccessToken = generateAccessToken(user);
+      const { token: newRefreshToken, expiresAt: newRefreshTokenExpiresAt } =
+        await generateAndStoreRefreshToken(user.id, client);
+      return { newAccessToken, newRefreshToken, newRefreshTokenExpiresAt };
+    });
   }
 
   public async handleUserLogout(input: LogoutInputDto): Promise<void> {
@@ -198,73 +191,83 @@ export class AuthService {
     email: string;
     name?: string | null;
     image?: string | null;
-  }): Promise<{ user: Omit<User, "hashedPassword">; tokens: AuthTokens }> {
-    const findUserSql = 'SELECT * FROM "users" WHERE "email" = $1';
-    const findResult = await query<User>(findUserSql, [profile.email]);
-    let user = findResult.rows[0];
+  }): Promise<{ user: Omit<User, "hashed_password">; tokens: AuthTokens }> {
+    return transaction(async (client) => {
+      const findUserSql = 'SELECT * FROM "users" WHERE "email" = $1';
+      const findResult = await client.query<User>(findUserSql, [profile.email]);
+      let user = findResult.rows[0];
 
-    if (user) {
-      logger.info(
-        { email: profile.email },
-        "Found existing user for OAuth login."
-      );
-      const updateSql = `UPDATE "users" SET "name" = $1, "profile_image" = $2 WHERE "email" = $3 RETURNING *;`;
-      const updateResult = await query<User>(updateSql, [
-        user.name ?? profile.name ?? "New User",
-        user.profile_image ?? profile.image ?? null,
-        profile.email,
-      ]);
-      user = updateResult.rows[0];
-    } else {
-      logger.info(
-        { email: profile.email },
-        "Creating new user from OAuth profile."
-      );
-      const baseUsername = profile.email
-        .split("@")[0]
-        .replace(/[^a-zA-Z0-9]/g, "");
-      const uniqueSuffix = crypto.randomBytes(4).toString("hex");
-      const username = `${baseUsername}_${uniqueSuffix}`;
+      if (user) {
+        logger.info(
+          { email: profile.email },
+          "Found existing user for OAuth login."
+        );
+        const updateSql = `UPDATE "users" SET "name" = $1, "profile_image_url" = $2 WHERE "email" = $3 RETURNING *;`;
+        const updateResult = await client.query<User>(updateSql, [
+          user.name ?? profile.name ?? "New User",
+          user.profile_image_url ?? profile.image ?? null,
+          profile.email,
+        ]);
+        user = updateResult.rows[0];
+      } else {
+        logger.info(
+          { email: profile.email },
+          "Creating new user from OAuth profile."
+        );
+        const baseUsername = profile.email
+          .split("@")[0]
+          .replace(/[^a-zA-Z0-9]/g, "");
+        const uniqueSuffix = crypto.randomBytes(4).toString("hex");
+        const username = `${baseUsername}_${uniqueSuffix}`;
 
-      const createSql = `
-        INSERT INTO "users" (email, name, username, email_verified, profile_image) 
-        VALUES ($1, $2, $3, $4, $5) RETURNING *;
-      `;
-      const createResult = await query<User>(createSql, [
-        profile.email,
-        profile.name ?? "New User",
-        username,
-        true,
-        profile.image,
-      ]);
-      user = createResult.rows[0];
-    }
+        const createSql = `
+          INSERT INTO "users" (email, name, username, email_verified, profile_image_url) 
+          VALUES ($1, $2, $3, $4, $5) RETURNING *;
+        `;
+        const createResult = await client.query<User>(createSql, [
+          profile.email,
+          profile.name ?? "New User",
+          username,
+          true,
+          profile.image,
+        ]);
+        user = createResult.rows[0];
+      }
 
-    await this.revokeAllRefreshTokensForUser(user.id);
-    const accessToken = generateAccessToken(user);
-    const { token: refreshToken, expiresAt } =
-      await generateAndStoreRefreshToken(user.id);
+      await this.revokeAllRefreshTokensForUser(user.id, client);
+      const accessToken = generateAccessToken(user);
+      const { token: refreshToken, expiresAt } =
+        await generateAndStoreRefreshToken(user.id, client);
 
-    return {
-      user: sanitizeUser(user),
-      tokens: { accessToken, refreshToken, refreshTokenExpiresAt: expiresAt },
-    };
+      return {
+        user: sanitizeUser(user),
+        tokens: { accessToken, refreshToken, refreshTokenExpiresAt: expiresAt },
+      };
+    });
   }
 
-  private async revokeTokenByJti(jti: string): Promise<void> {
+  private async revokeTokenByJti(
+    jti: string,
+    db: PoolClient | Pool = query
+  ): Promise<void> {
     const sql = 'UPDATE "refresh_tokens" SET "revoked" = true WHERE "jti" = $1';
-    await query(sql, [jti]).catch((err) =>
-      logger.warn(
-        { err, jti },
-        "Failed to revoke single token, it might already be gone."
-      )
-    );
+    await db
+      .query(sql, [jti])
+      .catch((err) =>
+        logger.warn(
+          { err, jti },
+          "Failed to revoke single token, it might already be gone."
+        )
+      );
   }
 
-  public async revokeAllRefreshTokensForUser(userId: string): Promise<void> {
+  public async revokeAllRefreshTokensForUser(
+    userId: string,
+    db: PoolClient | Pool = query
+  ): Promise<void> {
     const sql =
       'UPDATE "refresh_tokens" SET "revoked" = true WHERE "user_id" = $1 AND "revoked" = false';
-    const result = await query(sql, [userId]);
+    const result = await db.query(sql, [userId]);
     logger.info(
       { count: result.rowCount, userId },
       `Revoked all active sessions.`

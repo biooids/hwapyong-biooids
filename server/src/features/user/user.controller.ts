@@ -1,19 +1,15 @@
-// FILE: src/features/user/user.controller.ts
+// src/features/user/user.controller.ts
 
 import { Request, Response } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler.js";
 import { createHttpError } from "../../utils/error.factory.js";
-import { userService, User } from "./user.service.js"; // [MODIFIED] - Import our manual User type
+import { UserProfileUpdateData, userService, User } from "./user.service.js";
 import { uploadToCloudinary } from "../../config/cloudinary.js";
 import { logger } from "../../config/logger.js";
 import { config } from "../../config/index.js";
-import { followService } from "../follow/follow.service.js"; // Assuming this service will be refactored
-import { SystemRole } from "../../types/express.d.js"; // [ADDED] - Import our manual SystemRole enum
+import { followService } from "../follow/follow.service.js";
+import { SystemRole } from "../../types/express.d.js";
 
-// [REMOVED] - The import from Prisma's generated client is no longer needed.
-// import { SystemRole, User } from "@/prisma-client";
-
-// This helper function now uses our manually defined User type.
 const sanitizeUserForResponse = (user: User): Omit<User, "hashed_password"> => {
   const { hashed_password, ...sanitizedUser } = user;
   return sanitizedUser;
@@ -31,8 +27,6 @@ class UserController {
       throw createHttpError(404, "User data could not be found.");
     }
 
-    // [MODIFIED] - The complex data reshaping is no longer needed.
-    // The new userService.findUserById already returns a flat object with follower counts.
     res.status(200).json({
       status: "success",
       data: { user: sanitizeUserForResponse(user) },
@@ -51,7 +45,6 @@ class UserController {
       throw createHttpError(404, `User profile for @${username} not found.`);
     }
 
-    // [INFO] - No change needed here. The new service returns the exact shape this controller expects.
     res.status(200).json({
       status: "success",
       data: { user: userProfile },
@@ -60,7 +53,7 @@ class UserController {
 
   updateMyProfile = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const updateData = req.body;
+    const updateData: UserProfileUpdateData = req.body;
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
@@ -68,23 +61,23 @@ class UserController {
       logger.info({ userId }, "New profile image received. Uploading...");
       const result = await uploadToCloudinary(
         files.profileImage[0].path,
-        "user_assets",
-        `profile_${userId}`
+        "user_assets"
       );
-      updateData.profile_image = result.secure_url; // Use snake_case for the service layer
+      updateData.profile_image_url = result.secure_url;
+      updateData.profile_image_public_id = result.public_id;
     }
 
     if (files?.bannerImage?.[0]) {
       logger.info({ userId }, "New banner image received. Uploading...");
       const result = await uploadToCloudinary(
         files.bannerImage[0].path,
-        "user_assets",
-        `banner_${userId}`
+        "user_assets"
       );
-      updateData.banner_image = result.secure_url; // Use snake_case for the service layer
+      updateData.banner_image_url = result.secure_url;
+      updateData.banner_image_public_id = result.public_id;
     }
 
-    if (Object.keys(updateData).length === 0 && !req.files) {
+    if (Object.keys(updateData).length === 0) {
       throw createHttpError(400, "No update data provided.");
     }
 
@@ -112,7 +105,6 @@ class UserController {
       throw createHttpError(404, `User with ID ${targetUserId} not found.`);
     }
 
-    // [MODIFIED] - Data reshaping removed here as well.
     res.status(200).json({
       status: "success",
       data: { user: sanitizeUserForResponse(user) },
@@ -120,7 +112,6 @@ class UserController {
   });
 
   deleteUserById = asyncHandler(async (req: Request, res: Response) => {
-    // [MODIFIED] - This check now uses our manually defined SystemRole enum.
     if (req.user?.systemRole !== SystemRole.SUPER_ADMIN) {
       throw createHttpError(
         403,
@@ -140,7 +131,6 @@ class UserController {
     res.status(204).send();
   });
 
-  // These methods are fine as they delegate to another service we'll refactor later.
   followUser = asyncHandler(async (req: Request, res: Response) => {
     const followerId = req.user!.id;
     const { username: usernameToFollow } = req.params;

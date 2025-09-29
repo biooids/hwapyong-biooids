@@ -1,12 +1,8 @@
-// FILE: src/middleware/admin.middleware.ts
+// src/features/admin/admin.middleware.ts
 
 import { Request, Response, NextFunction } from "express";
-// [MODIFIED] - Import the manually defined SystemRole enum from your global types file.
-import { SystemRole } from "../types/express.d.js";
-import { createHttpError } from "../utils/error.factory.js";
-
-// [REMOVED] - The import from Prisma's generated client is no longer needed.
-// import { SystemRole } from "@/prisma-client";
+import { SystemRole } from "../../types/express.d.js";
+import { createHttpError } from "../../utils/error.factory.js";
 
 /**
  * Creates a middleware to check if the authenticated user has one of the specified roles.

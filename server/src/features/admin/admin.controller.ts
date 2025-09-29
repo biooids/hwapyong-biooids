@@ -1,10 +1,9 @@
-// FILE: src/features/admin/admin.controller.ts
+// src/features/admin/admin.controller.ts
 
 import { Request, Response } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler.js";
 import { adminService } from "./admin.service.js";
 import { createHttpError } from "../../utils/error.factory.js";
-import { SystemRole } from "../../types/express.d.js";
 
 class AdminController {
   getDashboardStats = asyncHandler(async (_req: Request, res: Response) => {
@@ -13,7 +12,6 @@ class AdminController {
   });
 
   getAllUsers = asyncHandler(async (req: Request, res: Response) => {
-    // Parse pagination from query, providing safe defaults.
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
 
@@ -36,10 +34,7 @@ class AdminController {
     const { id } = req.params;
     const { role } = req.body;
 
-    // This validation correctly uses the imported enum.
-    if (!role || !Object.values(SystemRole).includes(role)) {
-      throw createHttpError(400, "Invalid role provided.");
-    }
+    // The manual validation check is now removed and handled by the validation middleware.
 
     const updatedUser = await adminService.updateUserRole(id, role);
     res.status(200).json({ status: "success", data: updatedUser });

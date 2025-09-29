@@ -1,31 +1,14 @@
-// FILE: src/features/admin/admin.service.ts
+// src/features/admin/admin.service.ts
 
-// [MODIFIED] - Import the query function and our manual types.
 import { query } from "../../db/index.js";
 import { SystemRole } from "../../types/express.d.js";
-import { User } from "../user/user.service.js";
-
-// [REMOVED] - All Prisma imports are gone.
-// import prisma from "@/db/prisma.js";
-// import { User, Prisma, SystemRole } from "@/prisma-client";
-
-// [ADDED] - Manually defined types for this service's inputs and outputs.
-export interface AdminDashboardStats {
-  totalUsers: number;
-}
-
-export interface AdminApiQuery {
-  page?: number;
-  limit?: number;
-  q?: string;
-  sortBy?: "joined_at" | "name" | "email";
-  order?: "asc" | "desc";
-  filterByRole?: SystemRole;
-}
+import { User, userService } from "../user/user.service.js"; // Import userService
+import { AdminDashboardStats, AdminApiQuery } from "./admin.types.js";
+import { deleteFromCloudinary } from "../../config/cloudinary.js"; // Import Cloudinary util
+import { logger } from "../../config/logger.js";
 
 class AdminService {
   public async getDashboardStats(): Promise<AdminDashboardStats> {
-    // [MODIFIED] - Replaced prisma.user.count() with a direct SQL query.
     const sql = 'SELECT COUNT(*) FROM "users"';
     const result = await query<{ count: string }>(sql);
     const totalUsers = parseInt(result.rows[0].count, 10);
@@ -35,7 +18,6 @@ class AdminService {
   public async getAllUsers(
     queryParams: AdminApiQuery
   ): Promise<{ users: User[]; total: number }> {
-    // [MODIFIED] - This entire block is new logic to build a dynamic SQL query.
     const {
       page = 1,
       limit = 10,
@@ -66,7 +48,6 @@ class AdminService {
     const whereString =
       whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-    // Safely handle sorting to prevent SQL injection
     const allowedSortBy = ["joined_at", "name", "email"];
     const safeSortBy = allowedSortBy.includes(sortBy) ? sortBy : "joined_at";
     const safeOrder = order === "asc" ? "ASC" : "DESC";
@@ -74,7 +55,6 @@ class AdminService {
 
     const offset = (page - 1) * limit;
 
-    // Two queries are run in parallel: one for the paginated data, one for the total count.
     const usersSql = `SELECT * FROM "users" ${whereString} ${orderByString} LIMIT $${paramIndex} OFFSET $${
       paramIndex + 1
     }`;
@@ -95,7 +75,6 @@ class AdminService {
     userId: string,
     newRole: SystemRole
   ): Promise<User> {
-    // [MODIFIED] - Replaced prisma.user.update with a direct SQL UPDATE query.
     const sql =
       'UPDATE "users" SET "system_role" = $1 WHERE "id" = $2 RETURNING *';
     const result = await query<User>(sql, [newRole, userId]);
@@ -103,8 +82,31 @@ class AdminService {
   }
 
   public async deleteUser(userId: string): Promise<void> {
-    // [MODIFIED] - Replaced prisma.user.delete with a direct SQL DELETE query.
+    // CRITICAL FIX: Fetch user to get asset public_ids before deleting.
+    const user = await userService.findUserById(userId);
+    if (!user) {
+      logger.warn({ userId }, "Admin deletion skipped: User not found.");
+      return; // Or throw an error if you prefer
+    }
+
+    // Delete assets from Cloudinary
+    const deletionPromises: Promise<any>[] = [];
+    if (user.profile_image_public_id) {
+      deletionPromises.push(deleteFromCloudinary(user.profile_image_public_id));
+    }
+    if (user.banner_image_public_id) {
+      deletionPromises.push(deleteFromCloudinary(user.banner_image_public_id));
+    }
+    if (deletionPromises.length > 0) {
+      await Promise.allSettled(deletionPromises);
+    }
+
+    // Finally, delete the user from the database
     await query('DELETE FROM "users" WHERE "id" = $1', [userId]);
+    logger.info(
+      { userId, adminId: "SYSTEM" },
+      "Admin successfully deleted user."
+    );
   }
 }
 

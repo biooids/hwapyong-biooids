@@ -1,41 +1,55 @@
-//src/features/auth/auth.controller.ts
+// src/features/auth/auth.controller.ts
+
 import { asyncHandler } from "../../middleware/asyncHandler.js";
 import { Request, Response } from "express";
 import { authService } from "./auth.service.js";
 import { config } from "../../config/index.js";
 
 class AuthController {
-  signup = asyncHandler(async (req: Request, res: Response) => {
-    const { user, tokens } = await authService.registerUser(req.body);
-
-    res.cookie(config.cookies.refreshTokenName, tokens.refreshToken, {
+  private setRefreshTokenCookie(
+    res: Response,
+    refreshToken: string,
+    expires: Date
+  ) {
+    res.cookie(config.cookies.refreshTokenName, refreshToken, {
       httpOnly: true,
       secure: config.nodeEnv === "production",
       sameSite: "strict",
-      expires: tokens.refreshTokenExpiresAt,
+      expires: expires,
     });
+  }
 
+  signup = asyncHandler(async (req: Request, res: Response) => {
+    const { user, tokens } = await authService.registerUser(req.body);
+
+    this.setRefreshTokenCookie(
+      res,
+      tokens.refreshToken,
+      tokens.refreshTokenExpiresAt
+    );
+
+    // MODIFIED: Do not send the full tokens object.
     res.status(201).json({
       status: "success",
       message: "User registered successfully.",
-      data: { user, tokens },
+      data: { user, accessToken: tokens.accessToken },
     });
   });
 
   login = asyncHandler(async (req: Request, res: Response) => {
     const { user, tokens } = await authService.loginUser(req.body);
 
-    res.cookie(config.cookies.refreshTokenName, tokens.refreshToken, {
-      httpOnly: true,
-      secure: config.nodeEnv === "production",
-      sameSite: "strict",
-      expires: tokens.refreshTokenExpiresAt,
-    });
+    this.setRefreshTokenCookie(
+      res,
+      tokens.refreshToken,
+      tokens.refreshTokenExpiresAt
+    );
 
+    // MODIFIED: Do not send the full tokens object.
     res.status(200).json({
       status: "success",
       message: "Logged in successfully.",
-      data: { user, tokens },
+      data: { user, accessToken: tokens.accessToken },
     });
   });
 
@@ -45,12 +59,7 @@ class AuthController {
     const { newAccessToken, newRefreshToken, newRefreshTokenExpiresAt } =
       await authService.handleRefreshTokenRotation({ incomingRefreshToken });
 
-    res.cookie(config.cookies.refreshTokenName, newRefreshToken, {
-      httpOnly: true,
-      secure: config.nodeEnv === "production",
-      sameSite: "strict",
-      expires: newRefreshTokenExpiresAt,
-    });
+    this.setRefreshTokenCookie(res, newRefreshToken, newRefreshTokenExpiresAt);
 
     res.status(200).json({
       status: "success",
@@ -72,16 +81,16 @@ class AuthController {
   handleOAuth = asyncHandler(async (req: Request, res: Response) => {
     const { user, tokens } = await authService.findOrCreateOAuthUser(req.body);
 
-    res.cookie(config.cookies.refreshTokenName, tokens.refreshToken, {
-      httpOnly: true,
-      secure: config.nodeEnv === "production",
-      sameSite: "strict",
-      expires: tokens.refreshTokenExpiresAt,
-    });
+    this.setRefreshTokenCookie(
+      res,
+      tokens.refreshToken,
+      tokens.refreshTokenExpiresAt
+    );
 
+    // MODIFIED: Do not send the full tokens object.
     res.status(200).json({
       status: "success",
-      data: { user, tokens },
+      data: { user, accessToken: tokens.accessToken },
     });
   });
 
@@ -96,7 +105,6 @@ class AuthController {
     });
   });
 
-  // --- ADDED: The missing logoutAll method ---
   logoutAll = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     await authService.revokeAllRefreshTokensForUser(userId);

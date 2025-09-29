@@ -8,8 +8,8 @@ import {
 } from "./auth.validation.js";
 import { authController } from "./auth.controller.js";
 import { validate } from "../../middleware/validate.js";
-import { authenticate } from "../../middleware/authenticate.js";
-import { authLimiter } from "../../middleware/rateLimiter.js"; // <-- Import authLimiter
+import { authenticate } from "./auth.middleware.js"; // Corrected import path
+import { authLimiter } from "../../middleware/rateLimiter.js";
 
 const router: Router = Router();
 

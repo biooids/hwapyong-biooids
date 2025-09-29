@@ -1,4 +1,4 @@
-// FILE: src/utils/jwt.utils.ts
+// src/features/auth/jwt.utils.ts
 
 import jwt, {
   SignOptions,
@@ -6,49 +6,20 @@ import jwt, {
   JsonWebTokenError,
 } from "jsonwebtoken";
 import crypto from "crypto";
-import { config } from "../config/index.js";
-import { logger } from "../config/logger.js";
-import { query } from "../db/index.js";
-import { createHttpError } from "./error.factory.js";
-import { HttpError } from "./HttpError.js";
-// [MODIFIED] - Import the SystemRole enum for strong type safety.
-import { SystemRole } from "../types/express.d.js";
-
-// --- Type Definitions ---
-
-interface UserForToken {
-  id: string;
-  // [MODIFIED] - Use the imported enum instead of a generic string.
-  systemRole: SystemRole;
-}
-
-interface DecodedAccessTokenPayload {
-  id: string;
-  systemRole: SystemRole;
-  type: "access";
-  iat: number;
-  exp: number;
-}
-
-interface DecodedRefreshTokenPayload {
-  id: string;
-  type: "refresh";
-  iat: number;
-  exp: number;
-  jti: string;
-}
-
-interface RefreshToken {
-  jti: string;
-  userId: string;
-  expiresAt: Date;
-  revoked: boolean;
-}
-
-// --- The rest of the file remains the same ---
+import { Pool, PoolClient } from "pg";
+import { config } from "../../config/index.js";
+import { logger } from "../../config/logger.js";
+import { query } from "../../db/index.js";
+import { createHttpError } from "../../utils/error.factory.js";
+import { HttpError } from "../../utils/HttpError.js";
+import {
+  DecodedAccessTokenPayload,
+  DecodedRefreshTokenPayload,
+  RefreshToken,
+  UserForToken,
+} from "./auth.types.js";
 
 export const generateAccessToken = (user: UserForToken): string => {
-  // Now this function correctly expects a user object with a SystemRole enum
   const payload: Omit<DecodedAccessTokenPayload, "iat" | "exp"> = {
     id: user.id,
     systemRole: user.systemRole,
@@ -64,9 +35,10 @@ export const generateAccessToken = (user: UserForToken): string => {
   return token;
 };
 
-// ... (generateAndStoreRefreshToken and verifyAndValidateRefreshToken are unchanged)
 export const generateAndStoreRefreshToken = async (
-  userId: string
+  userId: string,
+  // ADDED: Accept a transactional client or the default pool.
+  db: PoolClient | Pool = query
 ): Promise<{ token: string; expiresAt: Date }> => {
   const jti = crypto.randomUUID();
   const expiresAt = new Date();
@@ -76,8 +48,9 @@ export const generateAndStoreRefreshToken = async (
 
   try {
     const sql =
-      'INSERT INTO "refresh_tokens" ("jti", "userId", "expiresAt") VALUES ($1, $2, $3)';
-    await query(sql, [jti, userId, expiresAt]);
+      'INSERT INTO "refresh_tokens" ("jti", "user_id", "expires_at") VALUES ($1, $2, $3)';
+    // Use the provided database client/pool.
+    await db.query(sql, [jti, userId, expiresAt]);
     logger.info({ jti, userId }, "[JWT] Refresh token JTI stored in DB");
   } catch (dbError) {
     logger.error({ err: dbError }, "[JWT] Failed to store refresh token in DB");
@@ -86,30 +59,30 @@ export const generateAndStoreRefreshToken = async (
 
   const token = jwt.sign(payload, config.jwt.refreshSecret, {
     expiresIn: `${config.jwt.refreshExpiresInDays}d`,
-    jwtid: jti, // Sets the 'jti' claim in the token
+    jwtid: jti,
   });
 
   return { token, expiresAt };
 };
 
 export const verifyAndValidateRefreshToken = async (
-  token: string
+  token: string,
+  // ADDED: Accept a transactional client or the default pool.
+  db: PoolClient | Pool = query
 ): Promise<DecodedRefreshTokenPayload> => {
   try {
-    // 1. Verify the JWT signature and expiration
     const decoded = jwt.verify(
       token,
       config.jwt.refreshSecret
     ) as DecodedRefreshTokenPayload;
 
-    // 2. Check for the correct payload structure
     if (!decoded.jti || !decoded.id || decoded.type !== "refresh") {
       throw createHttpError(401, "Invalid refresh token payload structure.");
     }
 
-    // 3. Check the token's status in the database
     const sql = 'SELECT * FROM "refresh_tokens" WHERE "jti" = $1';
-    const result = await query<RefreshToken>(sql, [decoded.jti]);
+    // Use the provided database client/pool.
+    const result = await db.query<RefreshToken>(sql, [decoded.jti]);
     const storedToken = result.rows[0];
 
     if (!storedToken) {
@@ -121,21 +94,20 @@ export const verifyAndValidateRefreshToken = async (
         "Session has been revoked. Please log in again."
       );
     }
-    if (new Date() > storedToken.expiresAt) {
+    if (new Date() > storedToken.expires_at) {
       throw createHttpError(403, "Session has expired. Please log in again.");
     }
 
-    // CRITICAL SECURITY CHECK: Ensure the user ID in the token matches the one in the DB.
-    if (storedToken.userId !== decoded.id) {
-      // If there's a mismatch, it's a security risk. Revoke the token immediately.
-      await query(
+    if (storedToken.user_id !== decoded.id) {
+      // Use the provided database client/pool to ensure this runs in the transaction.
+      await db.query(
         'UPDATE "refresh_tokens" SET "revoked" = true WHERE "jti" = $1',
         [decoded.jti]
       );
       logger.fatal(
         {
           jti: decoded.jti,
-          expectedUserId: storedToken.userId,
+          expectedUserId: storedToken.user_id,
           actualUserId: decoded.id,
         },
         "CRITICAL: Refresh token user mismatch. Token voided."
@@ -149,7 +121,6 @@ export const verifyAndValidateRefreshToken = async (
     );
     return decoded;
   } catch (error) {
-    // Handle specific errors and re-throw them as consistent HttpErrors
     if (error instanceof HttpError) {
       throw error;
     }
