@@ -1,35 +1,29 @@
-// FILE: src/db/index.ts
+// src/db/index.ts
 
-import { Pool, QueryResult } from "pg";
+import { Pool, PoolClient, QueryResult } from "pg";
 import { config } from "../config/index.js";
 import { logger } from "../config/logger.js";
 
-// 1. Initialize the Connection Pool
+// --- 1. Initialize the Connection Pool (with improved SSL) ---
 const pool = new Pool({
   connectionString: config.databaseUrl,
-
-  // --- ADDED: Conditional SSL Configuration ---
-  // This uses the spread syntax to add the 'ssl' property ONLY if
-  // the NODE_ENV is 'production'. In development, this property will not exist.
   ...(config.nodeEnv === "production" && {
     ssl: {
-      // Disables certificate validation. This is a common requirement for
-      // cloud database providers like Heroku, but you should always
-      // check your specific provider's documentation for the most secure setting.
-      rejectUnauthorized: false,
+      // Prioritize using the CA cert from env var for maximum security.
+      // Fallback to rejectUnauthorized for services that require it.
+      ...(process.env.DATABASE_CA
+        ? { ca: process.env.DATABASE_CA }
+        : { rejectUnauthorized: false }),
     },
   }),
 });
 
-// It's a best practice to listen for errors on idle clients to prevent the app from crashing.
 pool.on("error", (err) => {
   logger.error({ err }, "Unexpected error on idle client in pool");
-  // In a production environment, you might want to exit the process
-  // to allow a process manager (like PM2 or Docker) to restart it.
   process.exit(-1);
 });
 
-// --- Connection Logic with Retries (Unchanged) ---
+// --- 2. Connection Logic with Retries (Unchanged) ---
 const MAX_CONNECT_RETRIES = 5;
 const CONNECT_RETRY_DELAY_MS = 5000;
 
@@ -63,9 +57,6 @@ export async function connectDb(
   }
 }
 
-/**
- * Disconnects from the database by gracefully closing all clients in the pool.
- */
 export async function disconnectDb(): Promise<void> {
   try {
     await pool.end();
@@ -75,7 +66,7 @@ export async function disconnectDb(): Promise<void> {
   }
 }
 
-// 2. The Unified Query Function (Unchanged)
+// --- 3. The Unified Query Function (with improved logging) ---
 export const query = async <T>(
   text: string,
   params: any[] = []
@@ -90,7 +81,43 @@ export const query = async <T>(
     );
     return res;
   } catch (error) {
-    logger.error({ err: error }, "Database query failed");
+    // ADDED: Log the failed query and params for easier debugging.
+    logger.error({ err: error, sql: text, params }, "Database query failed");
     throw error;
+  }
+};
+
+// --- 4. NEW: Transaction Management Utility ---
+
+// Define a type for the work to be done inside a transaction.
+// It receives a client that is connected and part of the transaction.
+type TransactionCallback<T> = (client: PoolClient) => Promise<T>;
+
+/**
+ * Executes a series of database operations within a single transaction.
+ *
+ * @param callback A function that receives a database client and performs queries.
+ * @returns The result of the callback function.
+ * @example
+ * await transaction(async (client) => {
+ * await client.query('UPDATE accounts SET balance = balance - 100 WHERE id = 1');
+ * await client.query('UPDATE accounts SET balance = balance + 100 WHERE id = 2');
+ * });
+ */
+export const transaction = async <T>(
+  callback: TransactionCallback<T>
+): Promise<T> => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await callback(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    logger.error({ err: error }, "Transaction rolled back due to an error");
+    throw error;
+  } finally {
+    client.release();
   }
 };

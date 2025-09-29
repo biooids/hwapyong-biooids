@@ -1,4 +1,4 @@
-// FILE: server/src/config/index.ts
+// src/config/index.ts
 
 /**
  * Helper to get and validate environment variables.
@@ -68,7 +68,6 @@ interface Config {
     refreshTokenName: string;
   };
   logLevel: string;
-
   frontendUrl: string;
 }
 
@@ -104,7 +103,7 @@ try {
     },
 
     cookies: {
-      refreshTokenName: "jid",
+      refreshTokenName: "__Secure-refresh-token",
     },
     logLevel: getEnvVariable("LOG_LEVEL", false) || "info",
 

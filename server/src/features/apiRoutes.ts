@@ -5,7 +5,6 @@ import { authenticate } from "../middleware/authenticate.js";
 import authRoutes from "../features/auth/auth.routes.js";
 import userRoutes from "../features/user/user.routes.js";
 import adminRoutes from "../features/admin/admin.routes.js";
-zz;
 import followRoutes from "../features/follow/follow.routes.js"; // <-- IMPORT
 
 // Main API router that aggregates all feature routes

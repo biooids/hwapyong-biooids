@@ -29,8 +29,10 @@ CREATE TABLE "users" (
   "bio" TEXT,
   "title" TEXT,
   "location" TEXT,
-  "profile_image" TEXT DEFAULT 'https://res.cloudinary.com/djtww0vax/image/upload/v1747766773/xi-biooid_bstapi.jpg',
-  "banner_image" TEXT DEFAULT 'https://res.cloudinary.com/djtww0vax/image/upload/v1747766773/xi-biooid_bstapi.jpg',
+  "profile_image_url" TEXT DEFAULT 'https://res.cloudinary.com/djtww0vax/image/upload/v1747766773/xi-biooid_bstapi.jpg',
+  "profile_image_public_id" TEXT, -- ADDED: For robust asset management
+  "banner_image_url" TEXT DEFAULT 'https://res.cloudinary.com/djtww0vax/image/upload/v1747766773/xi-biooid_bstapi.jpg',
+  "banner_image_public_id" TEXT, -- ADDED: For robust asset management
   "joined_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "system_role" "SystemRole" NOT NULL DEFAULT 'USER',
@@ -61,7 +63,6 @@ CREATE TABLE "refresh_tokens" (
 );
  
 -- Stores user-specific application preferences like theme.
--- [MODIFIED] - Columns for deleted features (notifications, email) have been removed.
 CREATE TABLE "user_settings" (
   "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   "theme" "ThemePreference" NOT NULL DEFAULT 'SYSTEM',
