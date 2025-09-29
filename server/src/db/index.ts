@@ -1,6 +1,6 @@
 // src/db/index.ts
 
-import { Pool, PoolClient, QueryResult } from "pg";
+import { Pool, PoolClient, QueryResult, QueryResultRow } from "pg"; // MODIFIED: Imported QueryResultRow
 import { config } from "../config/index.js";
 import { logger } from "../config/logger.js";
 
@@ -67,7 +67,7 @@ export async function disconnectDb(): Promise<void> {
 }
 
 // --- 3. The Unified Query Function (with improved logging) ---
-export const query = async <T>(
+export const query = async <T extends QueryResultRow>( // MODIFIED: Added constraint
   text: string,
   params: any[] = []
 ): Promise<QueryResult<T>> => {
@@ -81,7 +81,6 @@ export const query = async <T>(
     );
     return res;
   } catch (error) {
-    // ADDED: Log the failed query and params for easier debugging.
     logger.error({ err: error, sql: text, params }, "Database query failed");
     throw error;
   }
@@ -121,3 +120,5 @@ export const transaction = async <T>(
     client.release();
   }
 };
+
+export { pool };

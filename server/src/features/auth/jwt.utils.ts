@@ -9,7 +9,7 @@ import crypto from "crypto";
 import { Pool, PoolClient } from "pg";
 import { config } from "../../config/index.js";
 import { logger } from "../../config/logger.js";
-import { query } from "../../db/index.js";
+import { pool } from "../../db/index.js"; // MODIFIED: Import pool instead of query
 import { createHttpError } from "../../utils/error.factory.js";
 import { HttpError } from "../../utils/HttpError.js";
 import {
@@ -37,8 +37,7 @@ export const generateAccessToken = (user: UserForToken): string => {
 
 export const generateAndStoreRefreshToken = async (
   userId: string,
-  // ADDED: Accept a transactional client or the default pool.
-  db: PoolClient | Pool = query
+  db: PoolClient | Pool = pool // MODIFIED: Use pool as the default
 ): Promise<{ token: string; expiresAt: Date }> => {
   const jti = crypto.randomUUID();
   const expiresAt = new Date();
@@ -49,7 +48,6 @@ export const generateAndStoreRefreshToken = async (
   try {
     const sql =
       'INSERT INTO "refresh_tokens" ("jti", "user_id", "expires_at") VALUES ($1, $2, $3)';
-    // Use the provided database client/pool.
     await db.query(sql, [jti, userId, expiresAt]);
     logger.info({ jti, userId }, "[JWT] Refresh token JTI stored in DB");
   } catch (dbError) {
@@ -67,8 +65,7 @@ export const generateAndStoreRefreshToken = async (
 
 export const verifyAndValidateRefreshToken = async (
   token: string,
-  // ADDED: Accept a transactional client or the default pool.
-  db: PoolClient | Pool = query
+  db: PoolClient | Pool = pool // MODIFIED: Use pool as the default
 ): Promise<DecodedRefreshTokenPayload> => {
   try {
     const decoded = jwt.verify(
@@ -81,7 +78,6 @@ export const verifyAndValidateRefreshToken = async (
     }
 
     const sql = 'SELECT * FROM "refresh_tokens" WHERE "jti" = $1';
-    // Use the provided database client/pool.
     const result = await db.query<RefreshToken>(sql, [decoded.jti]);
     const storedToken = result.rows[0];
 
@@ -99,7 +95,6 @@ export const verifyAndValidateRefreshToken = async (
     }
 
     if (storedToken.user_id !== decoded.id) {
-      // Use the provided database client/pool to ensure this runs in the transaction.
       await db.query(
         'UPDATE "refresh_tokens" SET "revoked" = true WHERE "jti" = $1',
         [decoded.jti]

@@ -1,18 +1,18 @@
 // src/features/user/user.service.ts
 
 import { Pool, PoolClient } from "pg";
-import { createHttpError } from "../../utils/error.factory.js";
-import { logger } from "../../config/logger.js";
-import { deleteFromCloudinary } from "../../config/cloudinary.js";
+import { createHttpError } from "@/utils/error.factory.js";
+import { logger } from "@/config/logger.js";
+import { deleteFromCloudinary } from "@/config/cloudinary.js";
 import { SignUpInputDto } from "../auth/auth.types.js";
-import { query } from "../../db/index.js";
+import { pool, query } from "@/db/index.js";
 import { hashPassword } from "../auth/auth.utils.js";
 import {
   User,
   UserProfileUpdateData,
   UserWithFollowCounts,
   UserProfile,
-} from "./user.types.js"; // Import all types from the dedicated file
+} from "./user.types.js";
 
 export class UserService {
   public async findUserByEmail(email: string): Promise<User | null> {
@@ -23,7 +23,7 @@ export class UserService {
 
   public async findUserById(
     id: string,
-    db: PoolClient | Pool = query
+    db: PoolClient | Pool = pool
   ): Promise<UserWithFollowCounts | null> {
     const sql = `
       SELECT *,
@@ -45,7 +45,7 @@ export class UserService {
         u.id, u.name, u.username, u.email, u.email_verified AS "emailVerified",
         u.bio, u.title, u.location, u.profile_image_url AS "profileImageUrl",
         u.banner_image_url AS "bannerImageUrl", u.joined_at AS "joinedAt",
-        u.updated_at AS "updatedAt", u.system_role AS "systemRole",
+        u.updated_at AS "updatedAt", u.system_role,
         (SELECT COUNT(*) FROM "follows" WHERE "following_id" = u.id)::int AS "followersCount",
         (SELECT COUNT(*) FROM "follows" WHERE "follower_id" = u.id)::int AS "followingCount",
         EXISTS(SELECT 1 FROM "follows" WHERE "follower_id" = $2 AND "following_id" = u.id) AS "isFollowing"
@@ -58,7 +58,7 @@ export class UserService {
 
   public async createUser(
     input: SignUpInputDto,
-    db: PoolClient | Pool = query
+    db: PoolClient | Pool = pool
   ): Promise<User> {
     const { email, username, password, name } = input;
     const hashedPassword = await hashPassword(password);

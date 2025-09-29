@@ -1,8 +1,8 @@
 // src/features/follow/follow.service.ts
 
-import { createHttpError } from "../../utils/error.factory.js";
-import { userService } from "../user/user.service.js";
-import { query } from "../../db/index.js";
+import { createHttpError } from "@/utils/error.factory.js";
+import { userService } from "@/features/user/user.service.js";
+import { query } from "@/db/index.js";
 import { FollowUserDto } from "./follow.types.js";
 
 class FollowService {
@@ -15,12 +15,13 @@ class FollowService {
       throw createHttpError(400, "You cannot follow yourself.");
     }
 
-    // This logic is already robust and needs no changes.
     const checkSql =
       'SELECT 1 FROM "follows" WHERE "follower_id" = $1 AND "following_id" = $2';
     const checkResult = await query(checkSql, [followerId, userToFollow.id]);
-    if (checkResult.rowCount > 0) {
-      return;
+
+    // MODIFIED: A simple truthiness check handles both the 'null' and '0' cases.
+    if (checkResult.rowCount) {
+      return; // Already following, do nothing.
     }
 
     const insertSql =

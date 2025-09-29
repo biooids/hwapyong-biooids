@@ -1,14 +1,15 @@
 // src/features/user/user.controller.ts
 
 import { Request, Response } from "express";
-import { asyncHandler } from "../../middleware/asyncHandler.js";
-import { createHttpError } from "../../utils/error.factory.js";
-import { UserProfileUpdateData, userService, User } from "./user.service.js";
-import { uploadToCloudinary } from "../../config/cloudinary.js";
-import { logger } from "../../config/logger.js";
-import { config } from "../../config/index.js";
+import { asyncHandler } from "@/middleware/asyncHandler.js";
+import { createHttpError } from "@/utils/error.factory.js";
+import { userService } from "./user.service.js";
+import { User, UserProfileUpdateData } from "./user.types.js";
+import { uploadToCloudinary } from "@/config/cloudinary.js";
+import { logger } from "@/config/logger.js";
+import { config } from "@/config/index.js";
 import { followService } from "../follow/follow.service.js";
-import { SystemRole } from "../../types/express.d.js";
+import { SystemRole } from "@/types/express.d.js";
 
 const sanitizeUserForResponse = (user: User): Omit<User, "hashed_password"> => {
   const { hashed_password, ...sanitizedUser } = user;

@@ -34,6 +34,7 @@ const getEnvVariableAsInt = (
     if (defaultValue !== undefined) {
       return defaultValue;
     }
+    // This case should ideally not be hit if required is true, but as a fallback.
     return NaN;
   }
 
@@ -69,20 +70,24 @@ interface Config {
   };
   logLevel: string;
   frontendUrl: string;
+  // ADDED: Optional properties for production-only services
+  redisUrl?: string;
+  databaseCa?: string;
 }
 
 let config: Config;
 
 try {
+  const nodeEnv = getEnvVariable("NODE_ENV", true) as
+    | "development"
+    | "production"
+    | "test";
+
   config = {
-    nodeEnv: getEnvVariable("NODE_ENV", true) as
-      | "development"
-      | "production"
-      | "test",
+    nodeEnv,
     port: getEnvVariableAsInt("PORT", true),
     databaseUrl: getEnvVariable("DATABASE_URL", true),
     corsOrigin: getEnvVariable("CORS_ORIGIN", true),
-
     jwt: {
       accessSecret: getEnvVariable("ACCESS_TOKEN_SECRET", true),
       accessExpiresInSeconds: getEnvVariableAsInt(
@@ -95,20 +100,22 @@ try {
         true
       ),
     },
-
     cloudinary: {
       cloudName: getEnvVariable("CLOUDINARY_CLOUD_NAME", true),
       apiKey: getEnvVariable("CLOUDINARY_API_KEY", true),
       apiSecret: getEnvVariable("CLOUDINARY_API_SECRET", true),
     },
-
     cookies: {
       refreshTokenName: "__Secure-refresh-token",
     },
     logLevel: getEnvVariable("LOG_LEVEL", false) || "info",
-
     frontendUrl: getEnvVariable("FRONTEND_URL", true),
   };
+
+  if (nodeEnv === "production") {
+    config.redisUrl = getEnvVariable("REDIS_URL", true);
+    config.databaseCa = getEnvVariable("DATABASE_CA", false);
+  }
 } catch (error) {
   console.error(
     "❌ Critical error during application configuration setup:",

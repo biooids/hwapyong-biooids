@@ -18,8 +18,9 @@ import {
   LogoutInputDto,
   ChangePasswordInputDto,
 } from "./auth.types.js";
-import { userService, User } from "../user/user.service.js";
-import { query, transaction } from "../../db/index.js";
+import { userService } from "../user/user.service.js";
+import { User } from "../user/user.types.js";
+import { pool, transaction } from "../../db/index.js";
 
 const sanitizeUser = (user: User): Omit<User, "hashed_password"> => {
   const { hashed_password, ...sanitized } = user;
@@ -52,7 +53,10 @@ export class AuthService {
         }
       }
       const user = await userService.createUser(input, client);
-      const accessToken = generateAccessToken(user);
+      const accessToken = generateAccessToken({
+        id: user.id,
+        systemRole: user.system_role,
+      });
       const { token: refreshToken, expiresAt } =
         await generateAndStoreRefreshToken(user.id, client);
       return {
@@ -89,7 +93,10 @@ export class AuthService {
         "User login successful, revoking old sessions."
       );
       await this.revokeAllRefreshTokensForUser(user.id, client);
-      const accessToken = generateAccessToken(user);
+      const accessToken = generateAccessToken({
+        id: user.id,
+        systemRole: user.system_role,
+      });
       const { token: refreshToken, expiresAt } =
         await generateAndStoreRefreshToken(user.id, client);
       return {
@@ -158,7 +165,10 @@ export class AuthService {
       }
 
       await this.revokeTokenByJti(decodedOldToken.jti, client);
-      const newAccessToken = generateAccessToken(user);
+      const newAccessToken = generateAccessToken({
+        id: user.id,
+        systemRole: user.system_role,
+      });
       const { token: newRefreshToken, expiresAt: newRefreshTokenExpiresAt } =
         await generateAndStoreRefreshToken(user.id, client);
       return { newAccessToken, newRefreshToken, newRefreshTokenExpiresAt };
@@ -235,7 +245,10 @@ export class AuthService {
       }
 
       await this.revokeAllRefreshTokensForUser(user.id, client);
-      const accessToken = generateAccessToken(user);
+      const accessToken = generateAccessToken({
+        id: user.id,
+        systemRole: user.system_role,
+      });
       const { token: refreshToken, expiresAt } =
         await generateAndStoreRefreshToken(user.id, client);
 
@@ -248,7 +261,7 @@ export class AuthService {
 
   private async revokeTokenByJti(
     jti: string,
-    db: PoolClient | Pool = query
+    db: PoolClient | Pool = pool
   ): Promise<void> {
     const sql = 'UPDATE "refresh_tokens" SET "revoked" = true WHERE "jti" = $1';
     await db
@@ -263,7 +276,7 @@ export class AuthService {
 
   public async revokeAllRefreshTokensForUser(
     userId: string,
-    db: PoolClient | Pool = query
+    db: PoolClient | Pool = pool
   ): Promise<void> {
     const sql =
       'UPDATE "refresh_tokens" SET "revoked" = true WHERE "user_id" = $1 AND "revoked" = false';

@@ -1,12 +1,11 @@
 // src/features/settings/settings.service.ts
 
-import { logger } from "../../config/logger.js";
-import { transaction } from "../../db/index.js"; // Import transaction utility
-import { UpdateUserSettingsDto, UserSettings } from "./settings.types.js"; // Import all types
+import { logger } from "@/config/logger.js";
+import { query, transaction } from "@/db/index.js";
+import { UpdateUserSettingsDto, UserSettings } from "./settings.types.js";
 
 class SettingsService {
   public async getUserSettings(userId: string): Promise<UserSettings> {
-    // Wrap the "get-or-create" logic in a transaction to prevent race conditions.
     return transaction(async (client) => {
       const findSql = 'SELECT * FROM "user_settings" WHERE "user_id" = $1';
       const findResult = await client.query<UserSettings>(findSql, [userId]);
@@ -33,7 +32,6 @@ class SettingsService {
     userId: string,
     data: UpdateUserSettingsDto
   ): Promise<UserSettings> {
-    // This upsert query is already atomic and highly efficient. No changes needed.
     const fields = Object.keys(data) as (keyof UpdateUserSettingsDto)[];
     if (fields.length === 0) {
       return this.getUserSettings(userId);
@@ -53,7 +51,6 @@ class SettingsService {
       RETURNING *;
     `;
 
-    // The query utility is fine here as it's a single, atomic operation.
     const result = await query<UserSettings>(upsertSql, [userId, ...values]);
     const updatedSettings = result.rows[0];
 

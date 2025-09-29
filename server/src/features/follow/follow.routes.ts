@@ -1,8 +1,8 @@
-// FILE: src/features/follow/follow.routes.ts
+// src/features/follow/follow.routes.ts
 
 import { Router } from "express";
 import { followController } from "./follow.controller.js";
-import { authenticate } from "../../middleware/authenticate.js";
+import { authenticate } from "../auth/auth.middleware.js";
 
 const router: Router = Router();
 

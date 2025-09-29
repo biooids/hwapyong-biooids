@@ -1,20 +1,20 @@
 // src/features/admin/admin.validation.ts
 import { z } from "zod";
-import { SystemRole } from "../../types/express.d.js";
+import { SystemRole } from "@/types/express.d.js";
 
 export const updateUserRoleSchema = z.object({
   body: z.object({
-    role: z.nativeEnum(SystemRole, {
-      errorMap: () => ({ message: "Invalid role provided." }),
+    role: z.enum(Object.values(SystemRole) as [string, ...string[]], {
+      error: "Invalid role provided.",
     }),
   }),
   params: z.object({
-    id: z.string().uuid("Invalid user ID format."),
+    id: z.uuid({ message: "Invalid user ID format." }),
   }),
 });
 
 export const deleteUserParamsSchema = z.object({
   params: z.object({
-    id: z.string().uuid("Invalid user ID format."),
+    id: z.uuid({ message: "Invalid user ID format." }),
   }),
 });

@@ -1,11 +1,12 @@
 // src/features/admin/admin.service.ts
 
-import { query } from "../../db/index.js";
-import { SystemRole } from "../../types/express.d.js";
-import { User, userService } from "../user/user.service.js"; // Import userService
+import { query } from "@/db/index.js";
+import { SystemRole } from "@/types/express.d.js";
+import { User } from "@/features/user/user.types.js";
+import { userService } from "@/features/user/user.service.js";
 import { AdminDashboardStats, AdminApiQuery } from "./admin.types.js";
-import { deleteFromCloudinary } from "../../config/cloudinary.js"; // Import Cloudinary util
-import { logger } from "../../config/logger.js";
+import { deleteFromCloudinary } from "@/config/cloudinary.js";
+import { logger } from "@/config/logger.js";
 
 class AdminService {
   public async getDashboardStats(): Promise<AdminDashboardStats> {
@@ -82,14 +83,12 @@ class AdminService {
   }
 
   public async deleteUser(userId: string): Promise<void> {
-    // CRITICAL FIX: Fetch user to get asset public_ids before deleting.
     const user = await userService.findUserById(userId);
     if (!user) {
       logger.warn({ userId }, "Admin deletion skipped: User not found.");
-      return; // Or throw an error if you prefer
+      return;
     }
 
-    // Delete assets from Cloudinary
     const deletionPromises: Promise<any>[] = [];
     if (user.profile_image_public_id) {
       deletionPromises.push(deleteFromCloudinary(user.profile_image_public_id));
@@ -101,7 +100,6 @@ class AdminService {
       await Promise.allSettled(deletionPromises);
     }
 
-    // Finally, delete the user from the database
     await query('DELETE FROM "users" WHERE "id" = $1', [userId]);
     logger.info(
       { userId, adminId: "SYSTEM" },
